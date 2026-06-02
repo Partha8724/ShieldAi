@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     // Set cookie
     response.cookies.set("sb-session-token", sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       expires,
       path: "/",
     });
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
     // Also set standard Supabase mock session for ease of migration if client checks both
     response.cookies.set("sb-mock-session", user.email || "", {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       expires,
       path: "/",
     });

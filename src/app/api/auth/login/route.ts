@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     // Set cookie
     response.cookies.set("sb-session-token", sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       expires,
       path: "/",
     });
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     // Cookie for mock Supabase compatibility
     response.cookies.set("sb-mock-session", user.email || "", {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       expires,
       path: "/",
     });

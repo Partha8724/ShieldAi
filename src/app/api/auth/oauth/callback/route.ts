@@ -121,7 +121,7 @@ export async function POST(req: Request) {
     // Set HttpOnly session token cookie
     response.cookies.set("sb-session-token", sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       expires,
       path: "/",
     });
@@ -129,7 +129,7 @@ export async function POST(req: Request) {
     // compatibility cookie
     response.cookies.set("sb-mock-session", user!.email || "", {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       expires,
       path: "/",
     });

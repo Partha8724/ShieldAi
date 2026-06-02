@@ -120,7 +120,7 @@ export async function handleUserAuth(email: string, name: string, provider: stri
   // Set HttpOnly session token cookie
   response.cookies.set("sb-session-token", sessionToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: false,
     expires,
     path: "/",
   });
@@ -128,7 +128,7 @@ export async function handleUserAuth(email: string, name: string, provider: stri
   // compatibility cookie
   response.cookies.set("sb-mock-session", user!.email || "", {
     httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
+    secure: false,
     expires,
     path: "/",
   });
