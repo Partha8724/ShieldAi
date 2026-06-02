@@ -7,7 +7,10 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const provider = searchParams.get("provider") || "google";
 
-    const siteUrl = new URL(req.url).origin;
+    let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+    if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
+      siteUrl = new URL(req.url).origin;
+    }
 
     if (provider === "google") {
       const clientId = process.env.GOOGLE_CLIENT_ID;

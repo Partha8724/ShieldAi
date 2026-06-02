@@ -52,8 +52,21 @@ export async function POST(req: Request) {
           ],
           application_context: {
             brand_name: "ShieldAI",
-            return_url: `${new URL(req.url).origin}/dashboard?payment=success`,
-            cancel_url: `${new URL(req.url).origin}/pricing`,
+            return_url: `${(() => {
+              let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+              if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
+                siteUrl = new URL(req.url).origin;
+              }
+              return siteUrl;
+            })()}/dashboard?payment=success`,
+            cancel_url: `${(() => {
+              let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+              if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
+                siteUrl = new URL(req.url).origin;
+              }
+              return siteUrl;
+            })()}/pricing`,
+
 
           },
         }),
