@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     const stripeSecret = process.env.STRIPE_SECRET_KEY;
     if (stripeSecret && paymentMethod.toLowerCase() === "stripe") {
       const stripe = new Stripe(stripeSecret, { apiVersion: "2024-04-10" as any });
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+      const siteUrl = new URL(req.url).origin;
 
       const stripeSession = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
 
     if (paymentMethod.toLowerCase() === "crypto") {
       const apiKey = process.env.NOWPAYMENTS_API_KEY;
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+      const siteUrl = new URL(req.url).origin;
 
       if (apiKey) {
         const isSandbox = process.env.NOWPAYMENTS_SANDBOX === "true";

@@ -52,8 +52,9 @@ export async function POST(req: Request) {
           ],
           application_context: {
             brand_name: "ShieldAI",
-            return_url: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard?payment=success`,
-            cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/pricing`,
+            return_url: `${new URL(req.url).origin}/dashboard?payment=success`,
+            cancel_url: `${new URL(req.url).origin}/pricing`,
+
           },
         }),
       });

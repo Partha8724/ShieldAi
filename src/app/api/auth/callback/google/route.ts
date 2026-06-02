@@ -4,7 +4,7 @@ import { handleUserAuth } from "@/lib/auth-oauth-helper";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const siteUrl = new URL(req.url).origin;
   try {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
