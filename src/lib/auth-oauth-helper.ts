@@ -35,19 +35,21 @@ export async function handleUserAuth(email: string, name: string, provider: stri
         },
       });
 
-      // Provision FREE Subscription
-      const freePlan = await tx.plan.findUnique({
-        where: { name: "FREE" },
+      // Provision CREATOR Subscription (1 month free)
+      const creatorPlan = await tx.plan.findUnique({
+        where: { name: "CREATOR" },
       });
 
       await tx.subscription.create({
         data: {
           userId: newUser.id,
-          planTier: "FREE",
-          planId: freePlan?.id || null,
+          planTier: "CREATOR",
+          planId: creatorPlan?.id || null,
           status: "ACTIVE",
+          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         },
       });
+
 
       // Audit Log
       await tx.auditLog.create({

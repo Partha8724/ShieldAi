@@ -36,20 +36,22 @@ export async function POST(req: Request) {
         },
       });
 
-      // Get standard FREE plan
-      let freePlan = await tx.plan.findUnique({
-        where: { name: "FREE" },
+      // Get standard CREATOR plan
+      let creatorPlan = await tx.plan.findUnique({
+        where: { name: "CREATOR" },
       });
 
-      // Create free subscription
+      // Create creator subscription (1 month free)
       await tx.subscription.create({
         data: {
           userId: newUser.id,
-          planTier: "FREE",
-          planId: freePlan?.id || null,
+          planTier: "CREATOR",
+          planId: creatorPlan?.id || null,
           status: "ACTIVE",
+          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         },
       });
+
 
       // Log audit
       await tx.auditLog.create({

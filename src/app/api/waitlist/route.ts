@@ -34,16 +34,18 @@ export async function POST(req: Request) {
               role: "USER",
             },
           });
-          const freePlan = await tx.plan.findUnique({ where: { name: "FREE" } });
+          const creatorPlan = await tx.plan.findUnique({ where: { name: "CREATOR" } });
           await tx.subscription.create({
             data: {
               userId: newUser.id,
-              planTier: "FREE",
-              planId: freePlan?.id || null,
+              planTier: "CREATOR",
+              planId: creatorPlan?.id || null,
               status: "ACTIVE",
+              currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             },
           });
           return newUser;
+
         });
       }
 
@@ -151,13 +153,14 @@ export async function POST(req: Request) {
             role: "USER",
           },
         });
-        const freePlan = await tx.plan.findUnique({ where: { name: "FREE" } });
+        const creatorPlan = await tx.plan.findUnique({ where: { name: "CREATOR" } });
         await tx.subscription.create({
           data: {
             userId: newUser.id,
-            planTier: "FREE",
-            planId: freePlan?.id || null,
+            planTier: "CREATOR",
+            planId: creatorPlan?.id || null,
             status: "ACTIVE",
+            currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           },
         });
         return newUser;
