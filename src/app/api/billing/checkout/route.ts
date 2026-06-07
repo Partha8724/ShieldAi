@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import Stripe from "stripe";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 export async function POST(req: Request) {
   try {
@@ -41,10 +42,7 @@ export async function POST(req: Request) {
     const stripeSecret = process.env.STRIPE_SECRET_KEY;
     if (stripeSecret && paymentMethod.toLowerCase() === "stripe") {
       const stripe = new Stripe(stripeSecret, { apiVersion: "2024-04-10" as any });
-      let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-      if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
-        siteUrl = new URL(req.url).origin;
-      }
+      const siteUrl = getCleanSiteUrl(req);
 
       const stripeSession = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -80,10 +78,7 @@ export async function POST(req: Request) {
 
     if (paymentMethod.toLowerCase() === "crypto") {
       const apiKey = process.env.NOWPAYMENTS_API_KEY;
-      let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-      if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
-        siteUrl = new URL(req.url).origin;
-      }
+      const siteUrl = getCleanSiteUrl(req);
 
       if (apiKey) {
         const isSandbox = process.env.NOWPAYMENTS_SANDBOX === "true";
@@ -236,10 +231,7 @@ export async function POST(req: Request) {
         : "https://api-m.sandbox.paypal.com";
 
       if (clientId && clientSecret) {
-        let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-        if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
-          siteUrl = new URL(req.url).origin;
-        }
+        const siteUrl = getCleanSiteUrl(req);
 
         try {
           // Get access token

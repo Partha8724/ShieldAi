@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import "./globals.css";
 import { Toaster } from "@/components/ui/Toast";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 const SmoothScroll = dynamic(() => import("@/components/SmoothScroll"), { ssr: false });
 
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
     "creator protection tools",
     "AI defense system"
   ],
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://shieldai.co"),
+  metadataBase: new URL(getCleanSiteUrl()),
   alternates: {
     canonical: "/",
   },

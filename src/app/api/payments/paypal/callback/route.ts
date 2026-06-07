@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +12,7 @@ export async function GET(req: Request) {
     const planTier = url.searchParams.get("planTier");
     const billingCycle = url.searchParams.get("billingCycle");
 
-    let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-    if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
-      siteUrl = url.origin;
-    }
+    const siteUrl = getCleanSiteUrl(req);
 
     if (!orderID || !userId || !planTier) {
       console.error("PayPal callback: Missing parameters", { orderID, userId, planTier });
@@ -161,10 +159,7 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error("PayPal callback exception:", error);
     // Try to fallback redirect to dashboard
-    let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-    if (!siteUrl) {
-      siteUrl = new URL(req.url).origin;
-    }
+    const siteUrl = getCleanSiteUrl(req);
     return NextResponse.redirect(`${siteUrl}/dashboard?payment=error`);
   }
 }

@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { handleUserAuth } from "@/lib/auth-oauth-helper";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-  if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
-    siteUrl = new URL(req.url).origin;
-  }
+  const siteUrl = getCleanSiteUrl(req);
   try {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");

@@ -1,7 +1,8 @@
 import { MetadataRoute } from "next";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 export default function robots(): MetadataRoute.Robots {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://shieldai.co";
+  const siteUrl = getCleanSiteUrl();
   return {
     rules: {
       userAgent: "*",

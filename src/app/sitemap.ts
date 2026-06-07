@@ -1,7 +1,8 @@
 import { MetadataRoute } from "next";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://shieldai.co";
+  const siteUrl = getCleanSiteUrl();
   const routes = ["", "/pricing", "/influencer", "/login", "/register", "/waitlist"];
 
   return routes.map((route) => ({

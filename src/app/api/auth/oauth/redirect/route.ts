@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -7,10 +8,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const provider = searchParams.get("provider") || "google";
 
-    let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-    if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
-      siteUrl = new URL(req.url).origin;
-    }
+    const siteUrl = getCleanSiteUrl(req);
 
     if (provider === "google") {
       const clientId = process.env.GOOGLE_CLIENT_ID;

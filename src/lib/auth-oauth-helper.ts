@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 export async function handleUserAuth(email: string, name: string, provider: string, req: Request) {
   const emailTrim = email.trim().toLowerCase();
   const providerAccountId = `${provider}-id-${Math.random().toString(36).substring(7)}`;
-  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-  if (!siteUrl || (siteUrl.includes("localhost") && process.env.NODE_ENV === "production")) {
-    siteUrl = new URL(req.url).origin;
-  }
+  const siteUrl = getCleanSiteUrl(req);
 
   let user = await prisma.user.findUnique({
     where: { email: emailTrim },
