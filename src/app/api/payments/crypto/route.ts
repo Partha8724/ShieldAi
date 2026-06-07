@@ -4,87 +4,83 @@ import { createHmac } from "crypto";
 
 export const dynamic = "force-dynamic";
 
-// NOWPayments IPN Signature Verification helper
-function verifyNowpaymentsSignature(
+// Coinbase Commerce Webhook Signature Verification helper
+function verifyCoinbaseSignature(
   rawBody: string,
   signature: string,
-  ipnSecret: string
+  webhookSecret: string
 ): boolean {
   try {
-    const payload = JSON.parse(rawBody);
-    
-    // Sort keys alphabetically
-    const sortedPayload: Record<string, any> = {};
-    Object.keys(payload)
-      .sort()
-      .forEach((key) => {
-        sortedPayload[key] = payload[key];
-      });
-
-    // Create sorted JSON string (NOWPayments signature is generated on sorted JSON)
-    const sortedString = JSON.stringify(sortedPayload);
-    
-    const computedSignature = createHmac("sha512", ipnSecret)
-      .update(sortedString)
+    const computedSignature = createHmac("sha256", webhookSecret)
+      .update(rawBody)
       .digest("hex");
 
     return computedSignature === signature;
   } catch (error) {
-    console.error("NOWPayments signature verification error:", error);
+    console.error("Coinbase signature verification error:", error);
     return false;
   }
 }
 
-// NOWPayments IPN Webhook handler
-// Receives events with payment_status: waiting, confirming, confirmed, finished, failed, expired
+// Coinbase Commerce Webhook Handler
+// Handles events: charge:confirmed, charge:resolved, charge:failed, charge:created, etc.
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
-    const signature = req.headers.get("x-nowpayments-sig") || "";
-    const ipnSecret = process.env.NOWPAYMENTS_IPN_SECRET;
+    const signature = req.headers.get("x-cc-webhook-signature") || "";
+    const webhookSecret = process.env.COINBASE_WEBHOOK_SECRET;
 
     // Verify webhook signature if secret and signature are present
-    if (ipnSecret && signature) {
-      const isVerified = verifyNowpaymentsSignature(rawBody, signature, ipnSecret);
+    if (webhookSecret && signature) {
+      const isVerified = verifyCoinbaseSignature(rawBody, signature, webhookSecret);
       if (!isVerified) {
-        console.error("NOWPayments webhook signature mismatch");
+        console.error("Coinbase Commerce webhook signature mismatch");
         return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
       }
     } else {
-      console.warn("NOWPayments webhook signature check skipped (IPN secret or signature missing).");
+      console.warn("Coinbase Commerce webhook signature check skipped (webhook secret or signature missing).");
     }
 
     const payload = JSON.parse(rawBody);
-    const { payment_status, payment_id, order_id, price_amount, price_currency } = payload;
+    const eventType = payload.event?.type;
+    const eventData = payload.event?.data;
 
-    if (!order_id) {
-      console.error("NOWPayments webhook missing order_id");
-      return NextResponse.json({ error: "Missing order_id" }, { status: 400 });
+    if (!eventType || !eventData) {
+      console.error("Invalid Coinbase Commerce webhook payload structure");
+      return NextResponse.json({ error: "Invalid payload structure" }, { status: 400 });
     }
 
-    // Parse metadata from order_id (format: userId:planTier:billingCycle:timestamp)
-    const parts = order_id.split(":");
-    if (parts.length < 3) {
-      console.error("Invalid NOWPayments order_id format:", order_id);
-      return NextResponse.json({ error: "Invalid order_id format" }, { status: 400 });
+    const chargeId = eventData.id;
+    const metadata = eventData.metadata;
+
+    if (!chargeId || !metadata) {
+      console.warn("Coinbase Commerce webhook missing charge id or metadata. Skipping event:", eventType);
+      return NextResponse.json({ success: true, message: "Skipped (no metadata/chargeId)" });
     }
 
-    const userId = parts[0];
-    const planTier = parts[1].toUpperCase();
-    const billingCycle = parts[2];
-    const resolvedAmount = parseFloat(price_amount) || 0;
-    const txId = `NOWPAY-${payment_id || Date.now()}`;
+    const { userId, planTier, billingCycle } = metadata;
 
-    // Verify user exists
+    if (!userId || !planTier) {
+      console.error("Coinbase Commerce webhook metadata missing userId or planTier", metadata);
+      return NextResponse.json({ error: "Missing metadata parameters" }, { status: 400 });
+    }
+
+    const resolvedPlanTier = planTier.toUpperCase();
+    const txId = `COINBASE-${chargeId}`;
+
+    // Verify user exists in database
     const userExists = await prisma.user.findUnique({ where: { id: userId } });
     if (!userExists) {
-      console.error("NOWPayments webhook user not found:", userId);
+      console.error("Coinbase Commerce webhook user not found in database:", userId);
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (payment_status === "confirmed" || payment_status === "finished") {
+    const resolvedAmount = parseFloat(eventData.payments?.[0]?.value?.local?.amount) || parseFloat(eventData.pricing?.local?.amount) || 0;
+    const priceCurrency = eventData.payments?.[0]?.value?.local?.currency || eventData.pricing?.local?.currency || "USD";
+
+    if (eventType === "charge:confirmed" || eventType === "charge:resolved") {
       const plan = await prisma.plan.findUnique({
-        where: { name: planTier },
+        where: { name: resolvedPlanTier },
       });
 
       const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -103,7 +99,7 @@ export async function POST(req: Request) {
           create: {
             userId,
             amount: resolvedAmount,
-            currency: price_currency ? price_currency.toUpperCase() : "USD",
+            currency: priceCurrency.toUpperCase(),
             status: "COMPLETED",
             paymentMethod: "CRYPTO",
             transactionId: txId,
@@ -114,14 +110,14 @@ export async function POST(req: Request) {
         const subscription = await tx.subscription.upsert({
           where: { userId },
           update: {
-            planTier,
+            planTier: resolvedPlanTier,
             planId: plan?.id || null,
             status: "ACTIVE",
             currentPeriodEnd,
           },
           create: {
             userId,
-            planTier,
+            planTier: resolvedPlanTier,
             planId: plan?.id || null,
             status: "ACTIVE",
             currentPeriodEnd,
@@ -134,7 +130,7 @@ export async function POST(req: Request) {
             userId,
             subscriptionId: subscription.id,
             amount: resolvedAmount,
-            currency: price_currency ? price_currency.toUpperCase() : "USD",
+            currency: priceCurrency.toUpperCase(),
             status: "PAID",
             invoiceNumber,
             dueDate: new Date(),
@@ -147,7 +143,7 @@ export async function POST(req: Request) {
           data: {
             userId,
             title: "Crypto Payment Confirmed",
-            message: `Your ShieldAI ${planTier} plan subscription has been successfully activated via NOWPayments.`,
+            message: `Your ShieldAI ${resolvedPlanTier} plan subscription has been successfully activated via Coinbase Commerce.`,
             type: "BILLING",
           },
         });
@@ -158,13 +154,13 @@ export async function POST(req: Request) {
             userId,
             action: "SUBSCRIBE_CRYPTO",
             resource: "SUBSCRIPTION",
-            details: `NOWPayments IPN confirmed, payment ID: ${payment_id}, amount: $${resolvedAmount}`,
+            details: `Coinbase Commerce webhook confirmed charge: ${chargeId}, amount: $${resolvedAmount}`,
           },
         });
       });
 
-      console.log(`NOWPayments subscription provisioned successfully for user ${userId}`);
-    } else if (payment_status === "failed" || payment_status === "expired") {
+      console.log(`Coinbase Commerce subscription provisioned successfully for user ${userId}`);
+    } else if (eventType === "charge:failed") {
       await prisma.$transaction(async (tx) => {
         // Update payment status to FAILED
         await tx.payment.updateMany({
@@ -177,19 +173,19 @@ export async function POST(req: Request) {
           data: {
             userId,
             title: "Crypto Payment Failed",
-            message: `Your cryptocurrency transaction via NOWPayments has failed or expired. Status: ${payment_status}`,
+            message: `Your cryptocurrency transaction via Coinbase Commerce has failed. Charge ID: ${chargeId}`,
             type: "BILLING",
           },
         });
       });
-      console.log(`NOWPayments subscription failed update processed for user ${userId}`);
+      console.log(`Coinbase Commerce subscription failed status processed for user ${userId}`);
     } else {
-      console.log(`NOWPayments webhook status check: ${payment_status} (no status actions taken)`);
+      console.log(`Coinbase Commerce webhook status check: ${eventType} (no action taken)`);
     }
 
     return NextResponse.json({ success: true, received: true });
   } catch (error) {
-    console.error("NOWPayments webhook error:", error);
+    console.error("Coinbase Commerce webhook exception:", error);
     return NextResponse.json({ error: "Webhook handler error" }, { status: 400 });
   }
 }

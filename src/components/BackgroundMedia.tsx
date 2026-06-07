@@ -44,19 +44,30 @@ export default function BackgroundMedia({ name, opacity = 0.15 }: BackgroundMedi
             { ext: "png", type: "image" }
           ] as const);
 
-      for (const item of extensions) {
-        const url = `/media/backgrounds/${activeName}-bg.${item.ext}`;
-        try {
-          const res = await fetch(url, { method: "HEAD" });
-          if (res.ok) {
-            setSrc(url);
-            setType(item.type);
-            return;
-          }
-        } catch (e) {}
+      try {
+        const results = await Promise.all(
+          extensions.map(async (item) => {
+            const url = `/media/backgrounds/${activeName}-bg.${item.ext}`;
+            try {
+              const res = await fetch(url, { method: "HEAD" });
+              return { url, type: item.type, ok: res.ok };
+            } catch {
+              return { url, type: item.type, ok: false };
+            }
+          })
+        );
+        const active = results.find((r) => r.ok);
+        if (active) {
+          setSrc(active.url);
+          setType(active.type);
+        } else {
+          setSrc(null);
+          setType(null);
+        }
+      } catch {
+        setSrc(null);
+        setType(null);
       }
-      setSrc(null);
-      setType(null);
     };
 
     checkBg();

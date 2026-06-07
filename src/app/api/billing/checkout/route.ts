@@ -77,40 +77,45 @@ export async function POST(req: Request) {
     }
 
     if (paymentMethod.toLowerCase() === "crypto") {
-      const apiKey = process.env.NOWPAYMENTS_API_KEY;
+      const apiKey = process.env.COINBASE_API_KEY;
       const siteUrl = getCleanSiteUrl(req);
 
       if (apiKey) {
-        const isSandbox = process.env.NOWPAYMENTS_SANDBOX === "true";
-        const nowpaymentsUrl = isSandbox 
-          ? "https://api-sandbox.nowpayments.io/v1/invoice" 
-          : "https://api.nowpayments.io/v1/invoice";
-
         try {
-          const res = await fetch(nowpaymentsUrl, {
+          const res = await fetch("https://api.commerce.coinbase.com/charges", {
             method: "POST",
             headers: {
-              "x-api-key": apiKey,
+              "X-CC-Api-Key": apiKey,
+              "X-CC-Version": "2018-03-22",
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              price_amount: amount,
-              price_currency: "usd",
-              order_id: `${session.userId}:${plan.name}:${billingCycle}:${Date.now()}`,
-              order_description: `ShieldAI ${plan.name} Plan (${billingCycle})`,
-              success_url: `${siteUrl}/dashboard?payment=success`,
+              name: `ShieldAI ${plan.name} Plan`,
+              description: billingCycle === "yearly" ? "Yearly protection license" : "Monthly protection license",
+              pricing_type: "fixed_price",
+              local_price: {
+                amount: String(amount),
+                currency: "USD",
+              },
+              metadata: {
+                userId: session.userId,
+                planTier: plan.name,
+                billingCycle,
+              },
+              redirect_url: `${siteUrl}/dashboard?payment=success`,
               cancel_url: `${siteUrl}/pricing`,
-              ipn_callback_url: `${siteUrl}/api/payments/crypto`,
             }),
           });
 
           if (!res.ok) {
             const errText = await res.text();
-            console.error("NOWPayments invoice creation failed:", errText);
-            return NextResponse.json({ error: `NOWPayments error: ${errText}` }, { status: 502 });
+            console.error("Coinbase Commerce charge creation failed:", errText);
+            return NextResponse.json({ error: `Coinbase Commerce error: ${errText}` }, { status: 502 });
           }
 
-          const invoiceData = await res.json();
+          const chargeRes = await res.json();
+          const chargeId = chargeRes.data.id;
+          const hostedUrl = chargeRes.data.hosted_url;
 
           // Create a pending payment in our database
           await prisma.payment.create({
@@ -120,19 +125,19 @@ export async function POST(req: Request) {
               currency: "USD",
               status: "PENDING",
               paymentMethod: "CRYPTO",
-              transactionId: `NOWPAY-${invoiceData.id || invoiceData.invoice_id}`,
+              transactionId: `COINBASE-${chargeId}`,
             },
           });
 
-          return NextResponse.json({ success: true, url: invoiceData.invoice_url });
+          return NextResponse.json({ success: true, url: hostedUrl });
         } catch (error) {
-          console.error("NOWPayments checkout error:", error);
-          return NextResponse.json({ error: "Failed to connect to NOWPayments" }, { status: 502 });
+          console.error("Coinbase Commerce checkout error:", error);
+          return NextResponse.json({ error: "Failed to connect to Coinbase Commerce" }, { status: 502 });
         }
       } else {
-        // Fallback: mock NOWPayments invoice redirection link for development
-        console.warn("NOWPAYMENTS_API_KEY is not set. Using local development simulator fallback.");
-        const mockInvoiceId = `MOCK-NOWPAY-${Date.now()}`;
+        // Fallback: mock Coinbase Commerce invoice redirection link for development
+        console.warn("COINBASE_API_KEY is not set. Using local development simulator fallback.");
+        const mockInvoiceId = `MOCK-COINBASE-${Date.now()}`;
         
         // Register pending payment in the database
         await prisma.payment.create({
@@ -199,7 +204,7 @@ export async function POST(req: Request) {
             data: {
               userId: session.userId,
               title: "Crypto Subscription Activated",
-              message: `Your ShieldAI ${plan.name} plan is active via simulated NOWPayments.`,
+              message: `Your ShieldAI ${plan.name} plan is active via simulated Coinbase Commerce.`,
               type: "BILLING",
             },
           });
@@ -210,7 +215,7 @@ export async function POST(req: Request) {
               userId: session.userId,
               action: "SUBSCRIBE_CRYPTO",
               resource: "SUBSCRIPTION",
-              details: `Simulated NOWPayments crypto checkout confirmed for ${plan.name}`,
+              details: `Simulated Coinbase Commerce crypto checkout confirmed for ${plan.name}`,
             },
           });
         });

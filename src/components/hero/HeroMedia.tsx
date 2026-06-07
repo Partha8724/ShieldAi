@@ -11,60 +11,82 @@ export default function HeroMedia() {
 
   useEffect(() => {
     const checkMedia = async () => {
-      // 1. Resolve Poster Image
       const posterPaths = [
         "/media/hero/hero-poster.jpg",
         "/media/hero/hero-poster.jpg.png",
         "/media/hero/hero-poster.png",
         "/media/hero/hero-poster.jpg.jpg"
       ];
-      for (const path of posterPaths) {
-        try {
-          const res = await fetch(path, { method: "HEAD" });
-          if (res.ok) {
-            setPosterSrc(path);
-            break;
-          }
-        } catch {}
-      }
-
-      // 2. Priority: background-video.mp4 > hero-video.mp4 > hero-image.jpg > default 3D scene
       const videoPaths = [
         "/media/hero/background-video.mp4",
         "/media/hero/background-video.mp4.mp4",
         "/media/hero/hero-video.mp4",
         "/media/hero/hero-video.mp4.mp4"
       ];
-      for (const path of videoPaths) {
-        try {
-          const res = await fetch(path, { method: "HEAD" });
-          if (res.ok) {
-            setMediaType("video");
-            setVideoSrc(path);
-            return;
-          }
-        } catch {}
-      }
-
-      // 3. Check for image fallback
       const imagePaths = [
         "/media/hero/hero-image.jpg",
         "/media/hero/hero-image.jpg.jpg",
         "/media/hero/hero-image.jpg.png",
         "/media/hero/hero-image.png"
       ];
-      for (const path of imagePaths) {
-        try {
-          const imgRes = await fetch(path, { method: "HEAD" });
-          if (imgRes.ok) {
-            setMediaType("image");
-            setImageSrc(path);
-            return;
-          }
-        } catch {}
-      }
 
-      setMediaType("default");
+      try {
+        const [posters, videos, images] = await Promise.all([
+          Promise.all(
+            posterPaths.map(async (path) => {
+              try {
+                const res = await fetch(path, { method: "HEAD" });
+                return { path, ok: res.ok };
+              } catch {
+                return { path, ok: false };
+              }
+            })
+          ),
+          Promise.all(
+            videoPaths.map(async (path) => {
+              try {
+                const res = await fetch(path, { method: "HEAD" });
+                return { path, ok: res.ok };
+              } catch {
+                return { path, ok: false };
+              }
+            })
+          ),
+          Promise.all(
+            imagePaths.map(async (path) => {
+              try {
+                const res = await fetch(path, { method: "HEAD" });
+                return { path, ok: res.ok };
+              } catch {
+                return { path, ok: false };
+              }
+            })
+          )
+        ]);
+
+        const activePoster = posters.find((p) => p.ok);
+        if (activePoster) {
+          setPosterSrc(activePoster.path);
+        }
+
+        const activeVideo = videos.find((v) => v.ok);
+        if (activeVideo) {
+          setMediaType("video");
+          setVideoSrc(activeVideo.path);
+          return;
+        }
+
+        const activeImage = images.find((img) => img.ok);
+        if (activeImage) {
+          setMediaType("image");
+          setImageSrc(activeImage.path);
+          return;
+        }
+
+        setMediaType("default");
+      } catch {
+        setMediaType("default");
+      }
     };
     checkMedia();
   }, []);

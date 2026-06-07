@@ -30,18 +30,31 @@ export default function SectionMedia({ dir, fallback, className = "w-full h-full
             { path: `${dir}/background.jpg`, type: "image" as const }
           ];
 
-      for (const file of files) {
-        try {
-          const res = await fetch(file.path, { method: "HEAD" });
-          if (res.ok) {
-            setMediaSrc(file.path);
-            setMediaType(file.type);
-            setChecked(true);
-            return;
-          }
-        } catch {}
+      try {
+        const results = await Promise.all(
+          files.map(async (file) => {
+            try {
+              const res = await fetch(file.path, { method: "HEAD" });
+              return { ...file, ok: res.ok };
+            } catch {
+              return { ...file, ok: false };
+            }
+          })
+        );
+        const active = results.find((r) => r.ok);
+        if (active) {
+          setMediaSrc(active.path);
+          setMediaType(active.type);
+        } else {
+          setMediaSrc(null);
+          setMediaType(null);
+        }
+      } catch {
+        setMediaSrc(null);
+        setMediaType(null);
+      } finally {
+        setChecked(true);
       }
-      setChecked(true);
     };
 
     checkMedia();
