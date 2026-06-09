@@ -269,15 +269,6 @@ function PricingContent() {
               ) : (
                 <div className="space-y-3">
                   <button
-                    onClick={() => handleCheckout(selectedPlan!, "stripe")}
-                    disabled={paymentState === "processing"}
-                    className="w-full bg-white/[0.05] border border-white/10 text-white hover:bg-white/10 h-14 rounded-xl text-sm font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50"
-                  >
-                    {processingMethod === "stripe" ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />}
-                    Pay securely with Card
-                  </button>
-
-                  <button
                     onClick={() => handleCheckout(selectedPlan!, "paypal")}
                     disabled={paymentState === "processing"}
                     className="w-full bg-white/[0.05] border border-white/10 text-white hover:bg-white/10 h-14 rounded-xl text-sm font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50"

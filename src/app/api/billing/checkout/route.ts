@@ -38,49 +38,16 @@ export async function POST(req: Request) {
 
     const amount = billingCycle === "yearly" ? plan.priceYearly : plan.priceMonthly;
 
-    // Check if Stripe client keys are set for original working payments
-    const stripeSecret = process.env.STRIPE_SECRET_KEY;
-    if (stripeSecret && paymentMethod.toLowerCase() === "stripe") {
-      const stripe = new Stripe(stripeSecret, { apiVersion: "2024-04-10" as any });
-      const siteUrl = getCleanSiteUrl(req);
-
-      const stripeSession = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              product_data: {
-                name: `ShieldAI ${plan.name} Plan`,
-                description: billingCycle === "yearly" ? "Yearly protection license" : "Monthly protection license",
-              },
-              unit_amount: amount * 100, // cents
-              recurring: {
-                interval: billingCycle === "yearly" ? "year" : "month",
-              },
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "subscription",
-        success_url: `${siteUrl}/dashboard?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${siteUrl}/pricing`,
-        customer_email: session.user.email || undefined,
-        metadata: {
-          userId: session.userId,
-          planTier: plan.name,
-          billingCycle,
-        },
-      });
-
-      return NextResponse.json({ success: true, url: stripeSession.url });
+    if (paymentMethod.toLowerCase() === "stripe") {
+      return NextResponse.json({ error: "Card payments are not supported. Please use PayPal or Crypto." }, { status: 400 });
     }
 
     if (paymentMethod.toLowerCase() === "crypto") {
       const apiKey = process.env.NEWPAYMENT_API_KEY;
       const siteUrl = getCleanSiteUrl(req);
+      const isLocalhost = siteUrl.includes("localhost") || siteUrl.includes("127.0.0.1");
 
-      if (apiKey) {
+      if (apiKey && !isLocalhost) {
         try {
           const res = await fetch("https://api.commerce.coinbase.com/charges", {
             method: "POST",

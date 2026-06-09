@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { usePathname } from "next/navigation";
 
 interface BackgroundMediaProps {
@@ -8,10 +8,13 @@ interface BackgroundMediaProps {
   opacity?: number;
 }
 
+const STATIC_BACKGROUNDS: Record<string, { src: string; type: "video" | "image" }> = {
+  homepage: { src: "/media/backgrounds/homepage-bg.mp4", type: "video" },
+  dashboard: { src: "/media/backgrounds/dashboard-bg.mp4", type: "video" },
+};
+
 export default function BackgroundMedia({ name, opacity = 0.15 }: BackgroundMediaProps) {
   const pathname = usePathname();
-  const [src, setSrc] = useState<string | null>(null);
-  const [type, setType] = useState<"video" | "image" | null>(null);
 
   // Resolve background type name from pathname if not explicitly passed
   const activeName = React.useMemo(() => {
@@ -24,65 +27,18 @@ export default function BackgroundMedia({ name, opacity = 0.15 }: BackgroundMedi
     return "homepage";
   }, [name, pathname]);
 
-  useEffect(() => {
-    const checkBg = async () => {
-      // Priority: mp4 > webm > jpg > png
-      const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-      const extensions = isMobile
-        ? ([
-            { ext: "jpg", type: "image" },
-            { ext: "jpeg", type: "image" },
-            { ext: "png", type: "image" },
-            { ext: "mp4", type: "video" },
-            { ext: "webm", type: "video" }
-          ] as const)
-        : ([
-            { ext: "mp4", type: "video" },
-            { ext: "webm", type: "video" },
-            { ext: "jpg", type: "image" },
-            { ext: "jpeg", type: "image" },
-            { ext: "png", type: "image" }
-          ] as const);
+  const activeBg = STATIC_BACKGROUNDS[activeName];
 
-      try {
-        const results = await Promise.all(
-          extensions.map(async (item) => {
-            const url = `/media/backgrounds/${activeName}-bg.${item.ext}`;
-            try {
-              const res = await fetch(url, { method: "HEAD" });
-              return { url, type: item.type, ok: res.ok };
-            } catch {
-              return { url, type: item.type, ok: false };
-            }
-          })
-        );
-        const active = results.find((r) => r.ok);
-        if (active) {
-          setSrc(active.url);
-          setType(active.type);
-        } else {
-          setSrc(null);
-          setType(null);
-        }
-      } catch {
-        setSrc(null);
-        setType(null);
-      }
-    };
-
-    checkBg();
-  }, [activeName]);
-
-  if (!src) return null;
+  if (!activeBg) return null;
 
   return (
     <div 
       className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden z-0" 
       style={{ opacity }}
     >
-      {type === "video" ? (
+      {activeBg.type === "video" ? (
         <video
-          src={src}
+          src={activeBg.src}
           autoPlay
           loop
           muted
@@ -91,7 +47,7 @@ export default function BackgroundMedia({ name, opacity = 0.15 }: BackgroundMedi
         />
       ) : (
         <img
-          src={src}
+          src={activeBg.src}
           alt={`${activeName} background`}
           className="w-full h-full object-cover"
         />
