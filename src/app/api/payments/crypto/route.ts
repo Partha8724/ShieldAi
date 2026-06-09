@@ -4,15 +4,28 @@ import { createHmac } from "crypto";
 
 export const dynamic = "force-dynamic";
 
-// Newpayment Webhook Signature Verification helper
+// NOWPayments IPN Webhook Signature Verification helper
 function verifyNewpaymentSignature(
   rawBody: string,
   signature: string,
   webhookSecret: string
 ): boolean {
   try {
-    const computedSignature = createHmac("sha256", webhookSecret)
-      .update(rawBody)
+    const payload = JSON.parse(rawBody);
+    
+    // Sort keys alphabetically as required by NOWPayments signature algorithm
+    const sortedPayload: Record<string, any> = {};
+    Object.keys(payload)
+      .sort()
+      .forEach((key) => {
+        sortedPayload[key] = payload[key];
+      });
+
+    // Create sorted JSON string
+    const sortedString = JSON.stringify(sortedPayload);
+    
+    const computedSignature = createHmac("sha512", webhookSecret)
+      .update(sortedString)
       .digest("hex");
 
     return computedSignature === signature;
@@ -22,12 +35,11 @@ function verifyNewpaymentSignature(
   }
 }
 
-// Newpayment Webhook Handler
-// Handles events: charge:confirmed, charge:resolved, charge:failed, charge:created, etc.
+// Newpayment Webhook Handler (NOWPayments IPN)
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
-    const signature = req.headers.get("x-cc-webhook-signature") || "";
+    const signature = req.headers.get("x-nowpayments-sig") || "";
     const webhookSecret = process.env.NEWPAYMENT_WEBHOOK_SECRET;
 
     // Verify webhook signature if secret and signature are present
@@ -42,31 +54,25 @@ export async function POST(req: Request) {
     }
 
     const payload = JSON.parse(rawBody);
-    const eventType = payload.event?.type;
-    const eventData = payload.event?.data;
+    const { payment_status, payment_id, order_id, price_amount, price_currency } = payload;
 
-    if (!eventType || !eventData) {
-      console.error("Invalid Newpayment webhook payload structure");
-      return NextResponse.json({ error: "Invalid payload structure" }, { status: 400 });
+    if (!order_id) {
+      console.error("Newpayment webhook missing order_id");
+      return NextResponse.json({ error: "Missing order_id" }, { status: 400 });
     }
 
-    const chargeId = eventData.id;
-    const metadata = eventData.metadata;
-
-    if (!chargeId || !metadata) {
-      console.warn("Newpayment webhook missing charge id or metadata. Skipping event:", eventType);
-      return NextResponse.json({ success: true, message: "Skipped (no metadata/chargeId)" });
+    // Parse metadata from order_id (format: userId:planTier:billingCycle:timestamp)
+    const parts = order_id.split(":");
+    if (parts.length < 3) {
+      console.error("Invalid Newpayment order_id format:", order_id);
+      return NextResponse.json({ error: "Invalid order_id format" }, { status: 400 });
     }
 
-    const { userId, planTier, billingCycle } = metadata;
-
-    if (!userId || !planTier) {
-      console.error("Newpayment webhook metadata missing userId or planTier", metadata);
-      return NextResponse.json({ error: "Missing metadata parameters" }, { status: 400 });
-    }
-
-    const resolvedPlanTier = planTier.toUpperCase();
-    const txId = `NEWPAYMENT-${chargeId}`;
+    const userId = parts[0];
+    const planTier = parts[1].toUpperCase();
+    const billingCycle = parts[2];
+    const resolvedAmount = parseFloat(price_amount) || 0;
+    const txId = `NEWPAY-${payment_id || Date.now()}`;
 
     // Verify user exists in database
     const userExists = await prisma.user.findUnique({ where: { id: userId } });
@@ -75,12 +81,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const resolvedAmount = parseFloat(eventData.payments?.[0]?.value?.local?.amount) || parseFloat(eventData.pricing?.local?.amount) || 0;
-    const priceCurrency = eventData.payments?.[0]?.value?.local?.currency || eventData.pricing?.local?.currency || "USD";
-
-    if (eventType === "charge:confirmed" || eventType === "charge:resolved") {
+    if (payment_status === "confirmed" || payment_status === "finished") {
       const plan = await prisma.plan.findUnique({
-        where: { name: resolvedPlanTier },
+        where: { name: planTier },
       });
 
       const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -99,7 +102,7 @@ export async function POST(req: Request) {
           create: {
             userId,
             amount: resolvedAmount,
-            currency: priceCurrency.toUpperCase(),
+            currency: price_currency ? price_currency.toUpperCase() : "USD",
             status: "COMPLETED",
             paymentMethod: "CRYPTO",
             transactionId: txId,
@@ -110,14 +113,14 @@ export async function POST(req: Request) {
         const subscription = await tx.subscription.upsert({
           where: { userId },
           update: {
-            planTier: resolvedPlanTier,
+            planTier,
             planId: plan?.id || null,
             status: "ACTIVE",
             currentPeriodEnd,
           },
           create: {
             userId,
-            planTier: resolvedPlanTier,
+            planTier,
             planId: plan?.id || null,
             status: "ACTIVE",
             currentPeriodEnd,
@@ -130,7 +133,7 @@ export async function POST(req: Request) {
             userId,
             subscriptionId: subscription.id,
             amount: resolvedAmount,
-            currency: priceCurrency.toUpperCase(),
+            currency: price_currency ? price_currency.toUpperCase() : "USD",
             status: "PAID",
             invoiceNumber,
             dueDate: new Date(),
@@ -143,7 +146,7 @@ export async function POST(req: Request) {
           data: {
             userId,
             title: "Crypto Payment Confirmed",
-            message: `Your ShieldAI ${resolvedPlanTier} plan subscription has been successfully activated via Newpayment.`,
+            message: `Your ShieldAI ${planTier} plan subscription has been successfully activated via Newpayment.`,
             type: "BILLING",
           },
         });
@@ -154,13 +157,13 @@ export async function POST(req: Request) {
             userId,
             action: "SUBSCRIBE_CRYPTO",
             resource: "SUBSCRIPTION",
-            details: `Newpayment webhook confirmed charge: ${chargeId}, amount: $${resolvedAmount}`,
+            details: `Newpayment IPN confirmed, payment ID: ${payment_id}, amount: $${resolvedAmount}`,
           },
         });
       });
 
       console.log(`Newpayment subscription provisioned successfully for user ${userId}`);
-    } else if (eventType === "charge:failed") {
+    } else if (payment_status === "failed" || payment_status === "expired") {
       await prisma.$transaction(async (tx) => {
         // Update payment status to FAILED
         await tx.payment.updateMany({
@@ -173,14 +176,14 @@ export async function POST(req: Request) {
           data: {
             userId,
             title: "Crypto Payment Failed",
-            message: `Your cryptocurrency transaction via Newpayment has failed. Charge ID: ${chargeId}`,
+            message: `Your cryptocurrency transaction via Newpayment has failed or expired. Status: ${payment_status}`,
             type: "BILLING",
           },
         });
       });
       console.log(`Newpayment subscription failed status processed for user ${userId}`);
     } else {
-      console.log(`Newpayment webhook status check: ${eventType} (no action taken)`);
+      console.log(`Newpayment webhook status check: ${payment_status} (no action taken)`);
     }
 
     return NextResponse.json({ success: true, received: true });

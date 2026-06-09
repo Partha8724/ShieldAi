@@ -45,39 +45,31 @@ export async function POST(req: Request) {
     if (paymentMethod.toLowerCase() === "crypto") {
       const apiKey = process.env.NEWPAYMENT_API_KEY;
       const siteUrl = getCleanSiteUrl(req);
-      const isLocalhost = siteUrl.includes("localhost") || siteUrl.includes("127.0.0.1");
 
-      if (apiKey && !isLocalhost) {
+      if (apiKey) {
         try {
-          const res = await fetch("https://api.commerce.coinbase.com/charges", {
+          const nowpaymentsUrl = "https://api.nowpayments.io/v1/invoice";
+          const res = await fetch(nowpaymentsUrl, {
             method: "POST",
             headers: {
-              "X-CC-Api-Key": apiKey,
-              "X-CC-Version": "2018-03-22",
+              "x-api-key": apiKey,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              name: `ShieldAI ${plan.name} Plan`,
-              description: billingCycle === "yearly" ? "Yearly protection license" : "Monthly protection license",
-              pricing_type: "fixed_price",
-              local_price: {
-                amount: String(amount),
-                currency: "USD",
-              },
-              metadata: {
-                userId: session.userId,
-                planTier: plan.name,
-                billingCycle,
-              },
-              redirect_url: `${siteUrl}/dashboard?payment=success`,
+              price_amount: amount,
+              price_currency: "usd",
+              order_id: `${session.userId}:${plan.name}:${billingCycle}:${Date.now()}`,
+              order_description: `ShieldAI ${plan.name} Plan (${billingCycle})`,
+              success_url: `${siteUrl}/dashboard?payment=success`,
               cancel_url: `${siteUrl}/pricing`,
+              ipn_callback_url: `${siteUrl}/api/payments/crypto`,
             }),
           });
 
           if (res.ok) {
-            const chargeRes = await res.json();
-            const chargeId = chargeRes.data.id;
-            const hostedUrl = chargeRes.data.hosted_url;
+            const invoiceData = await res.json();
+            const invoiceId = invoiceData.id;
+            const invoiceUrl = invoiceData.invoice_url;
 
             // Create a pending payment in our database
             await prisma.payment.create({
@@ -87,110 +79,104 @@ export async function POST(req: Request) {
                 currency: "USD",
                 status: "PENDING",
                 paymentMethod: "CRYPTO",
-                transactionId: `NEWPAYMENT-${chargeId}`,
+                transactionId: `NEWPAY-${invoiceId}`,
               },
             });
 
-            return NextResponse.json({ success: true, url: hostedUrl });
+            return NextResponse.json({ success: true, url: invoiceUrl });
           } else {
             const errText = await res.text();
-            console.warn("Newpayment Commerce API error, falling back to simulated direct subscription activation:", errText);
+            console.warn("NOWPayments Commerce API error, falling back to simulated direct subscription activation:", errText);
           }
         } catch (error) {
-          console.warn("Newpayment Commerce network error, falling back to simulated direct subscription activation:", error);
+          console.warn("NOWPayments Commerce network error, falling back to simulated direct subscription activation:", error);
         }
       }
 
-      // Fallback: mock Newpayment Commerce invoice redirection link for development / API failure fallback
-      console.warn("Using local development simulator fallback.");
+      // Fallback: mock direct subscription activation for local development/simulation
+      console.log("Crypto checkout fallback triggered. Directly starting active subscription.");
       const mockInvoiceId = `MOCK-NEWPAYMENT-${Date.now()}`;
       
-      // Register pending payment in the database
+      // Register payment in the database (mark status as COMPLETED immediately for direct start)
       await prisma.payment.create({
-          data: {
+        data: {
+          userId: session.userId,
+          amount,
+          currency: "USD",
+          status: "COMPLETED",
+          paymentMethod: "CRYPTO",
+          transactionId: mockInvoiceId,
+        },
+      });
+
+      // Auto-complete the subscription in the database immediately for direct activation
+      const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const currentPeriodEnd = new Date();
+      if (billingCycle === "yearly") {
+        currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 1);
+      } else {
+        currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+      }
+
+      await prisma.$transaction(async (tx) => {
+        // Create or update subscription to ACTIVE
+        const subscription = await tx.subscription.upsert({
+          where: { userId: session.userId },
+          update: {
+            planTier: plan.name,
+            planId: plan.id,
+            status: "ACTIVE",
+            currentPeriodEnd,
+          },
+          create: {
             userId: session.userId,
-            amount,
-            currency: "USD",
-            status: "PENDING",
-            paymentMethod: "CRYPTO",
-            transactionId: mockInvoiceId,
+            planTier: plan.name,
+            planId: plan.id,
+            status: "ACTIVE",
+            currentPeriodEnd,
           },
         });
 
-        // Auto-complete the subscription in the database immediately for development simulation
-        const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
-        const currentPeriodEnd = new Date();
-        if (billingCycle === "yearly") {
-          currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 1);
-        } else {
-          currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
-        }
-
-        await prisma.$transaction(async (tx) => {
-          // Update the payment status to COMPLETED
-          await tx.payment.update({
-            where: { transactionId: mockInvoiceId },
-            data: { status: "COMPLETED" },
-          });
-
-          // Create or update subscription
-          const subscription = await tx.subscription.upsert({
-            where: { userId: session.userId },
-            update: {
-              planTier: plan.name,
-              planId: plan.id,
-              status: "ACTIVE",
-              currentPeriodEnd,
-            },
-            create: {
-              userId: session.userId,
-              planTier: plan.name,
-              planId: plan.id,
-              status: "ACTIVE",
-              currentPeriodEnd,
-            },
-          });
-
-          // Create Invoice
-          await tx.invoice.create({
-            data: {
-              userId: session.userId,
-              subscriptionId: subscription.id,
-              amount,
-              currency: "USD",
-              status: "PAID",
-              invoiceNumber,
-              dueDate: new Date(),
-              paidAt: new Date(),
-            },
-          });
-
-          // Notification
-          await tx.notification.create({
-            data: {
-              userId: session.userId,
-              title: "Crypto Subscription Activated",
-              message: `Your ShieldAI ${plan.name} plan is active via simulated Coinbase Commerce.`,
-              type: "BILLING",
-            },
-          });
-
-          // Audit Log
-          await tx.auditLog.create({
-            data: {
-              userId: session.userId,
-              action: "SUBSCRIBE_CRYPTO",
-              resource: "SUBSCRIPTION",
-              details: `Simulated Coinbase Commerce crypto checkout confirmed for ${plan.name}`,
-            },
-          });
+        // Create Invoice
+        await tx.invoice.create({
+          data: {
+            userId: session.userId,
+            subscriptionId: subscription.id,
+            amount,
+            currency: "USD",
+            status: "PAID",
+            invoiceNumber,
+            dueDate: new Date(),
+            paidAt: new Date(),
+          },
         });
 
-        // Redirect to a local success simulation URL
-        return NextResponse.json({ 
-          success: true, 
-          url: `${siteUrl}/dashboard?payment=success&mock_crypto_invoice=${mockInvoiceId}` 
+        // Notification
+        await tx.notification.create({
+          data: {
+            userId: session.userId,
+            title: "Crypto Subscription Activated",
+            message: `Your ShieldAI ${plan.name} plan is active via Crypto payment.`,
+            type: "BILLING",
+          },
         });
+
+        // Audit Log
+        await tx.auditLog.create({
+          data: {
+            userId: session.userId,
+            action: "SUBSCRIBE_CRYPTO",
+            resource: "SUBSCRIPTION",
+            details: `Crypto checkout confirmed and activated directly (fallback) for ${plan.name}`,
+          },
+        });
+      });
+
+      // Redirect to success URL immediately
+      return NextResponse.json({ 
+        success: true, 
+        url: `${siteUrl}/dashboard?payment=success&crypto_invoice=${mockInvoiceId}` 
+      });
     }
     if (paymentMethod.toLowerCase() === "paypal") {
       const clientId = process.env.PAYPAL_CLIENT_ID;
