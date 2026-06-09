@@ -8,67 +8,52 @@ interface SectionMediaProps {
   className?: string;
 }
 
+// Static lookup mapping of verified existing assets under public/media/home/
+const SECTION_MEDIA_CONFIG: Record<
+  string,
+  {
+    desktop: { path: string; type: "video" | "image" };
+    mobile: { path: string; type: "video" | "image" };
+  }
+> = {
+  "/media/home/section-1": {
+    desktop: { path: "/media/home/section-1/video.mp4", type: "video" },
+    mobile: { path: "/media/home/section-1/image.jpg", type: "image" },
+  },
+  "/media/home/section-2": {
+    desktop: { path: "/media/home/section-2/video.mp4", type: "video" },
+    mobile: { path: "/media/home/section-2/video.mp4", type: "video" },
+  },
+  "/media/home/section-3": {
+    desktop: { path: "/media/home/section-3/video.mp4", type: "video" },
+    mobile: { path: "/media/home/section-3/video.mp4", type: "video" },
+  },
+};
+
 export default function SectionMedia({ dir, fallback, className = "w-full h-full" }: SectionMediaProps) {
-  const [mediaSrc, setMediaSrc] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<"video" | "image" | null>(null);
-  const [checked, setChecked] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const checkMedia = async () => {
-      const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-      const files = isMobile
-        ? [
-            { path: `${dir}/image.jpg`, type: "image" as const },
-            { path: `${dir}/background.jpg`, type: "image" as const },
-            { path: `${dir}/video.mp4`, type: "video" as const },
-            { path: `${dir}/animation.webm`, type: "video" as const }
-          ]
-        : [
-            { path: `${dir}/video.mp4`, type: "video" as const },
-            { path: `${dir}/animation.webm`, type: "video" as const },
-            { path: `${dir}/image.jpg`, type: "image" as const },
-            { path: `${dir}/background.jpg`, type: "image" as const }
-          ];
-
-      try {
-        const results = await Promise.all(
-          files.map(async (file) => {
-            try {
-              const res = await fetch(file.path, { method: "HEAD" });
-              return { ...file, ok: res.ok };
-            } catch {
-              return { ...file, ok: false };
-            }
-          })
-        );
-        const active = results.find((r) => r.ok);
-        if (active) {
-          setMediaSrc(active.path);
-          setMediaType(active.type);
-        } else {
-          setMediaSrc(null);
-          setMediaType(null);
-        }
-      } catch {
-        setMediaSrc(null);
-        setMediaType(null);
-      } finally {
-        setChecked(true);
-      }
+    const checkMobile = () => {
+      setIsMobile(typeof window !== "undefined" && window.innerWidth < 768);
     };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
-    checkMedia();
-  }, [dir]);
-
-  if (!checked) {
-    return <div className="animate-pulse w-full h-full bg-white/5 rounded-2xl" />;
+  const config = SECTION_MEDIA_CONFIG[dir];
+  if (!config) {
+    return <>{fallback}</>;
   }
 
-  if (mediaSrc && mediaType === "video") {
+  const activeMedia = isMobile ? config.mobile : config.desktop;
+
+  if (activeMedia.type === "video") {
     return (
       <div className="w-full h-full relative overflow-hidden rounded-2xl flex items-center justify-center bg-black/20">
         <video
-          src={mediaSrc}
+          src={activeMedia.path}
           autoPlay
           loop
           muted
@@ -79,11 +64,11 @@ export default function SectionMedia({ dir, fallback, className = "w-full h-full
     );
   }
 
-  if (mediaSrc && mediaType === "image") {
+  if (activeMedia.type === "image") {
     return (
       <div className="w-full h-full relative overflow-hidden rounded-2xl flex items-center justify-center bg-black/20">
         <img
-          src={mediaSrc}
+          src={activeMedia.path}
           alt="Section Media"
           className="w-full h-full object-cover"
         />
