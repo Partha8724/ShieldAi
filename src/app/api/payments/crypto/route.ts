@@ -4,8 +4,8 @@ import { createHmac } from "crypto";
 
 export const dynamic = "force-dynamic";
 
-// Coinbase Commerce Webhook Signature Verification helper
-function verifyCoinbaseSignature(
+// Newpayment Webhook Signature Verification helper
+function verifyNewpaymentSignature(
   rawBody: string,
   signature: string,
   webhookSecret: string
@@ -17,28 +17,28 @@ function verifyCoinbaseSignature(
 
     return computedSignature === signature;
   } catch (error) {
-    console.error("Coinbase signature verification error:", error);
+    console.error("Newpayment signature verification error:", error);
     return false;
   }
 }
 
-// Coinbase Commerce Webhook Handler
+// Newpayment Webhook Handler
 // Handles events: charge:confirmed, charge:resolved, charge:failed, charge:created, etc.
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
     const signature = req.headers.get("x-cc-webhook-signature") || "";
-    const webhookSecret = process.env.COINBASE_WEBHOOK_SECRET;
+    const webhookSecret = process.env.NEWPAYMENT_WEBHOOK_SECRET;
 
     // Verify webhook signature if secret and signature are present
     if (webhookSecret && signature) {
-      const isVerified = verifyCoinbaseSignature(rawBody, signature, webhookSecret);
+      const isVerified = verifyNewpaymentSignature(rawBody, signature, webhookSecret);
       if (!isVerified) {
-        console.error("Coinbase Commerce webhook signature mismatch");
+        console.error("Newpayment webhook signature mismatch");
         return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
       }
     } else {
-      console.warn("Coinbase Commerce webhook signature check skipped (webhook secret or signature missing).");
+      console.warn("Newpayment webhook signature check skipped (webhook secret or signature missing).");
     }
 
     const payload = JSON.parse(rawBody);
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     const eventData = payload.event?.data;
 
     if (!eventType || !eventData) {
-      console.error("Invalid Coinbase Commerce webhook payload structure");
+      console.error("Invalid Newpayment webhook payload structure");
       return NextResponse.json({ error: "Invalid payload structure" }, { status: 400 });
     }
 
@@ -54,24 +54,24 @@ export async function POST(req: Request) {
     const metadata = eventData.metadata;
 
     if (!chargeId || !metadata) {
-      console.warn("Coinbase Commerce webhook missing charge id or metadata. Skipping event:", eventType);
+      console.warn("Newpayment webhook missing charge id or metadata. Skipping event:", eventType);
       return NextResponse.json({ success: true, message: "Skipped (no metadata/chargeId)" });
     }
 
     const { userId, planTier, billingCycle } = metadata;
 
     if (!userId || !planTier) {
-      console.error("Coinbase Commerce webhook metadata missing userId or planTier", metadata);
+      console.error("Newpayment webhook metadata missing userId or planTier", metadata);
       return NextResponse.json({ error: "Missing metadata parameters" }, { status: 400 });
     }
 
     const resolvedPlanTier = planTier.toUpperCase();
-    const txId = `COINBASE-${chargeId}`;
+    const txId = `NEWPAYMENT-${chargeId}`;
 
     // Verify user exists in database
     const userExists = await prisma.user.findUnique({ where: { id: userId } });
     if (!userExists) {
-      console.error("Coinbase Commerce webhook user not found in database:", userId);
+      console.error("Newpayment webhook user not found in database:", userId);
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
           data: {
             userId,
             title: "Crypto Payment Confirmed",
-            message: `Your ShieldAI ${resolvedPlanTier} plan subscription has been successfully activated via Coinbase Commerce.`,
+            message: `Your ShieldAI ${resolvedPlanTier} plan subscription has been successfully activated via Newpayment.`,
             type: "BILLING",
           },
         });
@@ -154,12 +154,12 @@ export async function POST(req: Request) {
             userId,
             action: "SUBSCRIBE_CRYPTO",
             resource: "SUBSCRIPTION",
-            details: `Coinbase Commerce webhook confirmed charge: ${chargeId}, amount: $${resolvedAmount}`,
+            details: `Newpayment webhook confirmed charge: ${chargeId}, amount: $${resolvedAmount}`,
           },
         });
       });
 
-      console.log(`Coinbase Commerce subscription provisioned successfully for user ${userId}`);
+      console.log(`Newpayment subscription provisioned successfully for user ${userId}`);
     } else if (eventType === "charge:failed") {
       await prisma.$transaction(async (tx) => {
         // Update payment status to FAILED
@@ -173,19 +173,19 @@ export async function POST(req: Request) {
           data: {
             userId,
             title: "Crypto Payment Failed",
-            message: `Your cryptocurrency transaction via Coinbase Commerce has failed. Charge ID: ${chargeId}`,
+            message: `Your cryptocurrency transaction via Newpayment has failed. Charge ID: ${chargeId}`,
             type: "BILLING",
           },
         });
       });
-      console.log(`Coinbase Commerce subscription failed status processed for user ${userId}`);
+      console.log(`Newpayment subscription failed status processed for user ${userId}`);
     } else {
-      console.log(`Coinbase Commerce webhook status check: ${eventType} (no action taken)`);
+      console.log(`Newpayment webhook status check: ${eventType} (no action taken)`);
     }
 
     return NextResponse.json({ success: true, received: true });
   } catch (error) {
-    console.error("Coinbase Commerce webhook exception:", error);
+    console.error("Newpayment webhook exception:", error);
     return NextResponse.json({ error: "Webhook handler error" }, { status: 400 });
   }
 }

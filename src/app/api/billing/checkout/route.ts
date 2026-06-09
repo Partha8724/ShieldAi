@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     }
 
     if (paymentMethod.toLowerCase() === "crypto") {
-      const apiKey = process.env.COINBASE_API_KEY;
+      const apiKey = process.env.NEWPAYMENT_API_KEY;
       const siteUrl = getCleanSiteUrl(req);
 
       if (apiKey) {
@@ -120,23 +120,23 @@ export async function POST(req: Request) {
                 currency: "USD",
                 status: "PENDING",
                 paymentMethod: "CRYPTO",
-                transactionId: `COINBASE-${chargeId}`,
+                transactionId: `NEWPAYMENT-${chargeId}`,
               },
             });
 
             return NextResponse.json({ success: true, url: hostedUrl });
           } else {
             const errText = await res.text();
-            console.warn("Coinbase Commerce API error, falling back to simulated direct subscription activation:", errText);
+            console.warn("Newpayment Commerce API error, falling back to simulated direct subscription activation:", errText);
           }
         } catch (error) {
-          console.warn("Coinbase Commerce network error, falling back to simulated direct subscription activation:", error);
+          console.warn("Newpayment Commerce network error, falling back to simulated direct subscription activation:", error);
         }
       }
 
-      // Fallback: mock Coinbase Commerce invoice redirection link for development / API failure fallback
+      // Fallback: mock Newpayment Commerce invoice redirection link for development / API failure fallback
       console.warn("Using local development simulator fallback.");
-      const mockInvoiceId = `MOCK-COINBASE-${Date.now()}`;
+      const mockInvoiceId = `MOCK-NEWPAYMENT-${Date.now()}`;
       
       // Register pending payment in the database
       await prisma.payment.create({
