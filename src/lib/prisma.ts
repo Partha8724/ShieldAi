@@ -85,6 +85,8 @@ async function seedIfNeeded() {
   }
 }
 
-// Seed on startup
-seedIfNeeded();
+// Seed on startup in development only to prevent production cold start latency
+if (process.env.NODE_ENV !== "production") {
+  seedIfNeeded();
+}
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
-import Stripe from "stripe";
+// Stripe integration removed per requirements
 import { getCleanSiteUrl } from "@/lib/utils";
 
 export async function POST(req: Request) {
@@ -93,90 +93,82 @@ export async function POST(req: Request) {
         }
       }
 
-      // Fallback: mock direct subscription activation for local development/simulation
-      console.log("Crypto checkout fallback triggered. Directly starting active subscription.");
-      const mockInvoiceId = `MOCK-NEWPAYMENT-${Date.now()}`;
-      
-      // Register payment in the database (mark status as COMPLETED immediately for direct start)
-      await prisma.payment.create({
-        data: {
-          userId: session.userId,
-          amount,
-          currency: "USD",
-          status: "COMPLETED",
-          paymentMethod: "CRYPTO",
-          transactionId: mockInvoiceId,
-        },
-      });
+      // Fallback for crypto checkout – only active in non‑production environments
+      if (process.env.NODE_ENV !== "production") {
+        console.log("Crypto checkout fallback triggered. Directly starting active subscription.");
+        const mockInvoiceId = `MOCK-NEWPAYMENT-${Date.now()}`;
 
-      // Auto-complete the subscription in the database immediately for direct activation
-      const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const currentPeriodEnd = new Date();
-      if (billingCycle === "yearly") {
-        currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 1);
-      } else {
-        currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
-      }
-
-      await prisma.$transaction(async (tx) => {
-        // Create or update subscription to ACTIVE
-        const subscription = await tx.subscription.upsert({
-          where: { userId: session.userId },
-          update: {
-            planTier: plan.name,
-            planId: plan.id,
-            status: "ACTIVE",
-            currentPeriodEnd,
-          },
-          create: {
-            userId: session.userId,
-            planTier: plan.name,
-            planId: plan.id,
-            status: "ACTIVE",
-            currentPeriodEnd,
-          },
-        });
-
-        // Create Invoice
-        await tx.invoice.create({
+        // Register payment (COMPLETED) for immediate activation
+        await prisma.payment.create({
           data: {
             userId: session.userId,
-            subscriptionId: subscription.id,
             amount,
             currency: "USD",
-            status: "PAID",
-            invoiceNumber,
-            dueDate: new Date(),
-            paidAt: new Date(),
+            status: "COMPLETED",
+            paymentMethod: "CRYPTO",
+            transactionId: mockInvoiceId,
           },
         });
 
-        // Notification
-        await tx.notification.create({
-          data: {
-            userId: session.userId,
-            title: "Crypto Subscription Activated",
-            message: `Your ShieldAI ${plan.name} plan is active via Crypto payment.`,
-            type: "BILLING",
-          },
+        // Calculate invoice and subscription period
+        const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const currentPeriodEnd = new Date();
+        if (billingCycle === "yearly") {
+          currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 1);
+        } else {
+          currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+        }
+
+        // Create subscription, invoice, notification and audit log in one transaction
+        await prisma.$transaction(async (tx) => {
+          const subscription = await tx.subscription.upsert({
+            where: { userId: session.userId },
+            update: { planTier: plan.name, planId: plan.id, status: "ACTIVE", currentPeriodEnd },
+            create: { userId: session.userId, planTier: plan.name, planId: plan.id, status: "ACTIVE", currentPeriodEnd },
+          });
+
+          await tx.invoice.create({
+            data: {
+              userId: session.userId,
+              subscriptionId: subscription.id,
+              amount,
+              currency: "USD",
+              status: "PAID",
+              invoiceNumber,
+              dueDate: new Date(),
+              paidAt: new Date(),
+            },
+          });
+
+          await tx.notification.create({
+            data: {
+              userId: session.userId,
+              title: "Crypto Subscription Activated",
+              message: `Your ShieldAI ${plan.name} plan is active via Crypto payment.`,
+              type: "BILLING",
+            },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              userId: session.userId,
+              action: "SUBSCRIBE_CRYPTO",
+              resource: "SUBSCRIPTION",
+              details: `Crypto checkout confirmed and activated directly (fallback) for ${plan.name}`,
+            },
+          });
         });
 
-        // Audit Log
-        await tx.auditLog.create({
-          data: {
-            userId: session.userId,
-            action: "SUBSCRIBE_CRYPTO",
-            resource: "SUBSCRIPTION",
-            details: `Crypto checkout confirmed and activated directly (fallback) for ${plan.name}`,
-          },
+        // Redirect to success URL in dev mode
+        return NextResponse.json({
+          success: true,
+          url: `${siteUrl}/dashboard?payment=success&crypto_invoice=${mockInvoiceId}`,
         });
-      });
-
-      // Redirect to success URL immediately
-      return NextResponse.json({ 
-        success: true, 
-        url: `${siteUrl}/dashboard?payment=success&crypto_invoice=${mockInvoiceId}` 
-      });
+      } else {
+        // In production, propagate the error so the client can show a proper message
+        console.error("NOWPayments API failed – fallback disabled in production");
+        return NextResponse.json({ error: "Payment provider unavailable – please try again later" }, { status: 502 });
+      }
     }
     if (paymentMethod.toLowerCase() === "paypal") {
       const clientId = process.env.PAYPAL_CLIENT_ID;
