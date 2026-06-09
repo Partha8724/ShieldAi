@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 export async function POST(req: Request) {
   try {
@@ -24,6 +25,8 @@ export async function POST(req: Request) {
     if (!fileName || !fileSize || !mimeType || !hash) {
       return NextResponse.json({ error: "Missing required file attributes" }, { status: 400 });
     }
+
+    const siteUrl = getCleanSiteUrl(req);
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Check if upload already exists to prevent duplicate hashes
@@ -54,7 +57,7 @@ export async function POST(req: Request) {
           hash,
           watermarkId: watermark.id,
           status: "PROCESSED",
-          certificateUrl: `https://storage.shieldai.com/certificates/${hash}.json`,
+          certificateUrl: `${siteUrl}/api/sandbox/verify?hash=${hash}`,
         },
       });
 

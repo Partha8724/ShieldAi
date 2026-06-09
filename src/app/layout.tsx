@@ -8,28 +8,38 @@ import { getCleanSiteUrl } from "@/lib/utils";
 
 const SmoothScroll = dynamic(() => import("@/components/SmoothScroll"), { ssr: false });
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "ShieldAI | Cryptographic Identity & Content Protection",
-  description: "Inoculate your likeness against deepfakes, apply invisible steganographic signatures, and mathematically prove digital content ownership on-device.",
+  title: {
+    default: "ShieldAI | AI-Powered Identity & Content Protection",
+    template: "%s | ShieldAI",
+  },
+  description: "ShieldAI protects creators, influencers, and public figures from deepfakes, AI impersonation, and digital theft using cryptographic watermarking and real-time monitoring.",
   keywords: [
     "AI identity protection",
     "deepfake prevention",
+    "deepfake protection software",
+    "digital content copyright",
     "steganographic watermark",
-    "cryptographic signature",
-    "copyright verification",
-    "local-first privacy",
+    "cryptographic content signature",
+    "protect face from AI",
+    "AI content monitoring",
     "creator protection tools",
-    "AI defense system"
+    "content ownership verification",
+    "digital watermarking service",
+    "image copyright protection",
+    "AI impersonation protection",
+    "online identity security",
   ],
+  authors: [{ name: "ShieldAI Team", url: "https://shieldai-eight.vercel.app" }],
+  creator: "ShieldAI",
+  publisher: "ShieldAI",
   metadataBase: new URL(getCleanSiteUrl()),
-  alternates: {
-    canonical: "/",
-  },
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "ShieldAI | Cryptographic Identity & Content Protection",
-    description: "Inoculate your likeness against deepfakes, apply invisible steganographic signatures, and mathematically prove digital content ownership on-device.",
+    title: "ShieldAI | AI-Powered Identity & Content Protection",
+    description: "Protect your face, content, and identity from deepfakes and AI theft. Invisible watermarking, real-time threat monitoring, and cryptographic ownership certificates.",
     url: "/",
     siteName: "ShieldAI",
     images: [
@@ -37,7 +47,7 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "ShieldAI Platform Preview",
+        alt: "ShieldAI – Protect your digital identity from AI deepfakes",
       },
     ],
     locale: "en_US",
@@ -45,8 +55,10 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "ShieldAI | Cryptographic Identity & Content Protection",
-    description: "Inoculate your likeness against deepfakes, apply invisible steganographic signatures, and mathematically prove digital content ownership on-device.",
+    site: "@ShieldAI",
+    creator: "@ShieldAI",
+    title: "ShieldAI | AI-Powered Identity & Content Protection",
+    description: "Protect your face, content, and identity from deepfakes and AI theft. Real-time monitoring and cryptographic watermarking.",
     images: ["/og-image.png"],
   },
   robots: {
@@ -60,6 +72,7 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
+  category: "Technology",
 };
 
 export default function RootLayout({
@@ -67,26 +80,92 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const jsonLd = {
+  const organizationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "ShieldAI",
+    "url": "https://shieldai-eight.vercel.app",
+    "logo": "https://shieldai-eight.vercel.app/og-image.png",
+    "description": "ShieldAI provides AI-powered cryptographic identity and content protection for creators, influencers, and public figures.",
+    "foundingDate": "2024",
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "contactType": "Customer Support",
+      "availableLanguage": "English"
+    },
+    "sameAs": []
+  };
+
+  const softwareJsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "ShieldAI",
     "applicationCategory": "SecurityApplication",
     "operatingSystem": "All",
-    "description": "Cryptographic protection layer for digital identity and content ownership, inoculating likeness against deepfakes and scraping.",
-    "offers": {
-      "@type": "Offer",
-      "price": "19.00",
-      "priceCurrency": "USD"
-    }
+    "description": "Cryptographic protection layer for digital identity and content ownership. Protect your face, images, and videos from deepfakes and AI impersonation.",
+    "url": "https://shieldai-eight.vercel.app",
+    "offers": [
+      { "@type": "Offer", "name": "Creator Plan", "price": "9.99", "priceCurrency": "USD", "priceSpecification": { "@type": "UnitPriceSpecification", "billingDuration": "P1M" } },
+      { "@type": "Offer", "name": "Professional Plan", "price": "29.00", "priceCurrency": "USD", "priceSpecification": { "@type": "UnitPriceSpecification", "billingDuration": "P1M" } },
+      { "@type": "Offer", "name": "Enterprise Plan", "price": "70.00", "priceCurrency": "USD", "priceSpecification": { "@type": "UnitPriceSpecification", "billingDuration": "P1M" } }
+    ],
+    "featureList": [
+      "Invisible Steganographic Watermarking",
+      "Real-time Deepfake Monitoring",
+      "Cryptographic Ownership Certificates",
+      "AI Identity Vault",
+      "Automated Takedown Requests"
+    ]
+  };
+
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is ShieldAI?",
+        "acceptedAnswer": { "@type": "Answer", "text": "ShieldAI is an AI-powered platform that protects creators and public figures from deepfakes, AI impersonation, and digital content theft using cryptographic watermarking and real-time monitoring." }
+      },
+      {
+        "@type": "Question",
+        "name": "How does ShieldAI protect against deepfakes?",
+        "acceptedAnswer": { "@type": "Answer", "text": "ShieldAI applies invisible adversarial perturbations to your images that confuse AI deepfake models. It also monitors the web 24/7 for unauthorized use of your likeness and alerts you instantly." }
+      },
+      {
+        "@type": "Question",
+        "name": "Is ShieldAI safe and private?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes. ShieldAI processes your content on-device where possible, ensuring your private images and biometric data never leave your control. All operations use industry-standard cryptographic protocols." }
+      },
+      {
+        "@type": "Question",
+        "name": "What payment methods does ShieldAI accept?",
+        "acceptedAnswer": { "@type": "Answer", "text": "ShieldAI accepts PayPal and cryptocurrency payments via NOWPayments, supporting Bitcoin, Ethereum, USDT, and 300+ other cryptocurrencies." }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I cancel my ShieldAI subscription?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes, you can cancel your subscription at any time from your dashboard. Your protection remains active until the end of your billing period." }
+      }
+    ]
   };
 
   return (
     <html lang="en" className="dark" style={{ colorScheme: "dark" }}>
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
         />
       </head>
       <body className={`${inter.variable} font-sans min-h-screen bg-background text-foreground selection:bg-primary/30`}>
