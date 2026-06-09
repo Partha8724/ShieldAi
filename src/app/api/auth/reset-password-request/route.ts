@@ -1,8 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { generateVerificationToken } from "@/lib/security";
+import { getCleanSiteUrl } from "@/lib/utils";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+    const limiter = rateLimit(`reset-pwd-${ip}`, 3);
+    if (!limiter.success) {
+      return NextResponse.json(
+        { error: `Too many password reset requests. Please try again in ${limiter.reset} seconds.` },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(limiter.reset),
+          },
+        }
+      );
+    }
+
     const { email } = await req.json();
 
     if (!email) {
@@ -22,7 +39,7 @@ export async function POST(req: Request) {
     }
 
     // Generate token
-    const token = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+    const token = generateVerificationToken();
     const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
     // Store in DB
@@ -33,7 +50,8 @@ export async function POST(req: Request) {
     });
 
     // Dynamic reset link
-    const resetLink = `http://localhost:3000/reset-password?token=${token}`;
+    const siteUrl = getCleanSiteUrl(req);
+    const resetLink = `${siteUrl}/reset-password?token=${token}`;
     console.log("----------------------------------------");
     console.log("PASSWORD RESET REQUESTED FOR:", emailTrim);
     console.log("RESET LINK:", resetLink);

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/crypto";
+import { generateSessionToken, generateReferralCode, getSecureCookieOptions, getPublicCookieOptions } from "@/lib/security";
+import { getCleanSiteUrl } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
       }
 
       // Create session
-      const sessionToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+      const sessionToken = generateSessionToken();
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       await prisma.session.create({
@@ -69,19 +71,9 @@ export async function POST(req: Request) {
         waitlist: existing,
       });
 
-      response.cookies.set("sb-session-token", sessionToken, {
-        httpOnly: true,
-        secure: false,
-        expires,
-        path: "/",
-      });
+      response.cookies.set("sb-session-token", sessionToken, getSecureCookieOptions(expires));
 
-      response.cookies.set("sb-mock-session", user.email || "", {
-        httpOnly: false,
-        secure: false,
-        expires,
-        path: "/",
-      });
+      response.cookies.set("sb-mock-session", user.email || "", getPublicCookieOptions(expires));
 
       return response;
     }
@@ -89,8 +81,7 @@ export async function POST(req: Request) {
     // Generate unique referral code for this user
     const cleanName = name || "Waitlist Member";
     const userInitials = cleanName.replace(/[^a-zA-Z]/g, "").slice(0, 3).toUpperCase() || "SHD";
-    const randStr = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const referralCode = `REF-${userInitials}-${randStr}`;
+    const referralCode = `REF-${userInitials}-${generateReferralCode().slice(0, 4)}`;
 
     // Track referral
     let referredById: string | null = null;
@@ -168,7 +159,7 @@ export async function POST(req: Request) {
     }
 
     // Create session
-    const sessionToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+    const sessionToken = generateSessionToken();
     const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await prisma.session.create({
@@ -186,7 +177,8 @@ export async function POST(req: Request) {
     console.log("EMAIL CONFIRMATION SENT TO:", emailTrim);
     console.log("SUBJECT: Welcome to ShieldAI Early Access!");
     console.log("MESSAGE: Thank you for requesting early access. Your position in the queue is #" + rank);
-    console.log("REF LINK: http://localhost:3000/waitlist?ref=" + referralCode);
+    const siteUrl = getCleanSiteUrl(req);
+    console.log("REF LINK: " + siteUrl + "/waitlist?ref=" + referralCode);
     console.log("----------------------------------------");
 
     const response = NextResponse.json({
@@ -194,19 +186,9 @@ export async function POST(req: Request) {
       waitlist,
     });
 
-    response.cookies.set("sb-session-token", sessionToken, {
-      httpOnly: true,
-      secure: false,
-      expires,
-      path: "/",
-    });
+    response.cookies.set("sb-session-token", sessionToken, getSecureCookieOptions(expires));
 
-    response.cookies.set("sb-mock-session", user.email || "", {
-      httpOnly: false,
-      secure: false,
-      expires,
-      path: "/",
-    });
+    response.cookies.set("sb-mock-session", user.email || "", getPublicCookieOptions(expires));
 
     return response;
   } catch (err: any) {

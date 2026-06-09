@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCleanSiteUrl } from "@/lib/utils";
+import { generateSessionToken, generateSecureId, getSecureCookieOptions, getPublicCookieOptions } from "@/lib/security";
 
 export async function handleUserAuth(email: string, name: string, provider: string, req: Request) {
   const emailTrim = email.trim().toLowerCase();
-  const providerAccountId = `${provider}-id-${Math.random().toString(36).substring(7)}`;
+  const providerAccountId = generateSecureId(`${provider}-id`);
   const siteUrl = getCleanSiteUrl(req);
 
   let user = await prisma.user.findUnique({
@@ -87,7 +88,7 @@ export async function handleUserAuth(email: string, name: string, provider: stri
   }
 
   // Create session
-  const sessionToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+  const sessionToken = generateSessionToken();
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
   const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
@@ -116,20 +117,10 @@ export async function handleUserAuth(email: string, name: string, provider: stri
   const response = NextResponse.redirect(`${siteUrl}/dashboard`);
 
   // Set HttpOnly session token cookie
-  response.cookies.set("sb-session-token", sessionToken, {
-    httpOnly: true,
-    secure: false,
-    expires,
-    path: "/",
-  });
+  response.cookies.set("sb-session-token", sessionToken, getSecureCookieOptions(expires));
 
-  // compatibility cookie
-  response.cookies.set("sb-mock-session", user!.email || "", {
-    httpOnly: false,
-    secure: false,
-    expires,
-    path: "/",
-  });
+  // compatibility cookie (non-sensitive, client-readable)
+  response.cookies.set("sb-mock-session", user!.email || "", getPublicCookieOptions(expires));
 
   return response;
 }

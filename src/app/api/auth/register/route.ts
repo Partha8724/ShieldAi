@@ -1,9 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/crypto";
+import { generateSessionToken, getSecureCookieOptions, getPublicCookieOptions } from "@/lib/security";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+    const limiter = rateLimit(`register-${ip}`, 3);
+    if (!limiter.success) {
+      return NextResponse.json(
+        { error: `Too many registration attempts. Please try again in ${limiter.reset} seconds.` },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(limiter.reset),
+          },
+        }
+      );
+    }
+
     const { email, password, options } = await req.json();
     const fullName = options?.data?.full_name || null;
 
@@ -67,10 +83,9 @@ export async function POST(req: Request) {
     });
 
     // Create session token and log user in automatically
-    const sessionToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+    const sessionToken = generateSessionToken();
     const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
     const userAgent = req.headers.get("user-agent") || "unknown";
 
     await prisma.session.create({
@@ -88,20 +103,10 @@ export async function POST(req: Request) {
     });
 
     // Set cookie
-    response.cookies.set("sb-session-token", sessionToken, {
-      httpOnly: true,
-      secure: false,
-      expires,
-      path: "/",
-    });
+    response.cookies.set("sb-session-token", sessionToken, getSecureCookieOptions(expires));
 
     // Also set standard Supabase mock session for ease of migration if client checks both
-    response.cookies.set("sb-mock-session", user.email || "", {
-      httpOnly: false,
-      secure: false,
-      expires,
-      path: "/",
-    });
+    response.cookies.set("sb-mock-session", user.email || "", getPublicCookieOptions(expires));
 
     return response;
   } catch (err: any) {

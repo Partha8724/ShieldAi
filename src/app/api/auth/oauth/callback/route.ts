@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { generateSessionToken, generateSecureId, getSecureCookieOptions, getPublicCookieOptions } from "@/lib/security";
 
 export async function POST(req: Request) {
   try {
@@ -10,7 +11,7 @@ export async function POST(req: Request) {
     }
 
     const emailTrim = email.trim().toLowerCase();
-    const providerAccountId = `${provider}-id-${Math.random().toString(36).substring(7)}`;
+    const providerAccountId = generateSecureId(`${provider}-id`);
 
     let user = await prisma.user.findUnique({
       where: { email: emailTrim },
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
     }
 
     // Create session
-    const sessionToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+    const sessionToken = generateSessionToken();
     const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
     const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
@@ -119,20 +120,10 @@ export async function POST(req: Request) {
     const response = NextResponse.json({ success: true });
 
     // Set HttpOnly session token cookie
-    response.cookies.set("sb-session-token", sessionToken, {
-      httpOnly: true,
-      secure: false,
-      expires,
-      path: "/",
-    });
+    response.cookies.set("sb-session-token", sessionToken, getSecureCookieOptions(expires));
 
     // compatibility cookie
-    response.cookies.set("sb-mock-session", user!.email || "", {
-      httpOnly: false,
-      secure: false,
-      expires,
-      path: "/",
-    });
+    response.cookies.set("sb-mock-session", user!.email || "", getPublicCookieOptions(expires));
 
     return response;
   } catch (err: any) {

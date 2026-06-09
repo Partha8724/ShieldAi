@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { generateSessionToken, getSecureCookieOptions, getPublicCookieOptions } from "@/lib/security";
 
 export async function POST(req: Request) {
   try {
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
     }
 
     // Create session
-    const sessionToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+    const sessionToken = generateSessionToken();
     const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
@@ -54,19 +55,9 @@ export async function POST(req: Request) {
       user: { id: user.id, email: user.email, name: user.name },
     });
 
-    response.cookies.set("sb-session-token", sessionToken, {
-      httpOnly: true,
-      secure: false,
-      expires,
-      path: "/",
-    });
+    response.cookies.set("sb-session-token", sessionToken, getSecureCookieOptions(expires));
 
-    response.cookies.set("sb-mock-session", user.email || "", {
-      httpOnly: false,
-      secure: false,
-      expires,
-      path: "/",
-    });
+    response.cookies.set("sb-mock-session", user.email || "", getPublicCookieOptions(expires));
 
     return response;
   } catch (err: any) {
